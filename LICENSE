@@ -1,0 +1,11 @@
+Оболочка этого репозитория (каталог app/, скрипты сборки и workflow)
+распространяется свободно: используйте, изменяйте и публикуйте как удобно.
+
+Готовые архивы в GitHub Releases содержат чужое ПО со своими лицензиями:
+
+- Lampa — GNU GPL v2.0
+  https://github.com/yumata/lampa
+- NW.js — MIT
+  https://nwjs.io
+- FFmpeg prebuilt for NW.js
+  https://github.com/nwjs-ffmpeg-prebuilt/nwjs-ffmpeg-prebuilt

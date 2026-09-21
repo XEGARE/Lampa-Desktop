@@ -1,0 +1,278 @@
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+	<title>Lampa</title>
+
+	<style>
+		body{
+			background: #1d1f20;
+		}
+
+		iframe{
+			position: fixed;
+			top: 30px;
+			left: 0;
+			width: 100%;
+			height: calc(100% - 30px);
+			border: 0;
+		}
+
+		.head{
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 30px;
+			display: flex;
+		}
+
+		.head__drag{
+			flex-grow: 1
+		}
+
+		.head__logo,
+		.head__buttons{
+			flex-shrink: 0
+		}
+
+		.head__buttons{
+			display: flex;
+		}
+
+		.button{
+			width: 46px;
+			height: 30px;
+			cursor: pointer;
+			background-position: 50% 50%;
+			background-repeat: no-repeat;
+		}
+
+		.button--small{
+			background-image: url(./frame/small.svg)
+		}
+
+		.button--fullsize{
+			background-image: url(./frame/fullsize.svg)
+		}
+
+		.button--close{
+			background-image: url(./frame/close.svg)
+		}
+
+		.button--url-settings{
+			background-image: url(./frame/url-settings.svg)
+		}
+
+		.button:hover{
+			background-color: #383838
+		}
+
+		.button--close:hover{
+			background-color: #E81123
+		}
+
+		.loader{
+			position: fixed;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background: #fff;
+			z-index: 1;
+			transition: all 0.3s;
+		}
+		.loader--complite{
+			opacity: 0
+		}
+	</style>
+</head>
+<body>
+	<div class="head">
+		<div class="button button--url-settings" id="url-settings" role="button"></div>
+		<div class="head__drag" style="-webkit-app-region: drag"></div>
+		<div class="head__buttons">
+			<div class="button button--small" id="wn-cu"></div>
+			<div class="button button--fullsize" id="wn-ex"></div>
+			<div class="button button--close" id="wn-cl"></div>
+		</div>
+	</div>
+
+	<iframe id="content" src="about:blank" autofocus allowfullscreen nwfaketop></iframe>
+
+	<div class="loader" id="loader"></div>
+
+	<script>
+		process.on('uncaughtException', function (err) {});
+
+		let win = nw.Window.get();
+		let maximized = false;
+		let saveWindowTimer;
+		const windowPositionKey = 'lampa_window_position';
+
+		let saveWindowState = function (){
+			if(maximized) return;
+
+			try{
+				localStorage.setItem(windowPositionKey, JSON.stringify({
+					x: Math.round(win.x),
+					y: Math.round(win.y),
+					width: Math.round(win.width),
+					height: Math.round(win.height)
+				}));
+			}
+			catch(e){}
+		};
+
+		let restoreWindowState = function (){
+			try{
+				let position = JSON.parse(localStorage.getItem(windowPositionKey));
+				if(!position || !Number.isFinite(position.x) || !Number.isFinite(position.y)) throw new Error();
+				let width = Number.isFinite(position.width) ? position.width : win.width;
+				let height = Number.isFinite(position.height) ? position.height : win.height;
+
+				nw.Screen.Init();
+				let visible = nw.Screen.screens.some(function (screen){
+					let area = screen.work_area || screen.bounds;
+					let visibleWidth = Math.min(position.x + width, area.x + area.width) - Math.max(position.x, area.x);
+					let visibleTitleBarHeight = Math.min(position.y + 30, area.y + area.height) - Math.max(position.y, area.y);
+
+					return visibleWidth >= 100 && visibleTitleBarHeight >= 20;
+				});
+
+				if(!visible) throw new Error();
+				win.resizeTo(width, height);
+				win.moveTo(position.x, position.y);
+			}
+			catch(e){
+				win.setPosition('center');
+			}
+		};
+
+		win.on('maximize', function (){
+			maximized = true;
+		});
+
+		win.on('unmaximize', function (){
+			maximized = false;
+		});
+
+		let scheduleWindowStateSave = function (){
+			clearTimeout(saveWindowTimer);
+			saveWindowTimer = setTimeout(saveWindowState, 250);
+		};
+
+		win.on('move', scheduleWindowStateSave);
+		win.on('resize', scheduleWindowStateSave);
+
+		win.on('close', function (){
+			clearTimeout(saveWindowTimer);
+			saveWindowState();
+			this.close(true);
+		});
+
+		document.getElementById('wn-ex').addEventListener('click', function (){
+			if(maximized){
+				win.unmaximize();
+
+				maximized = false;
+			}
+			else{
+				win.maximize();
+			}
+		});
+
+		document.getElementById('wn-cu').addEventListener('click', function (){
+			win.minimize();
+		});
+
+		document.getElementById('wn-cl').addEventListener('click', function (){
+			win.close();
+		});
+
+		let content = document.getElementById('content');
+
+		let isValidUrl = (urlString)=>{
+			if(urlString === 'index.html')
+				return true;
+
+			try{
+				let url = new URL(urlString);
+				return url.protocol === 'http:' || url.protocol === 'https:';
+			}
+			catch(e){
+			}
+			return false;
+		};
+
+		let normalizeUrl = (urlString)=>{
+			let normalizedUrl = urlString.trim();
+			if(normalizedUrl === '' || normalizedUrl === 'index.html') return 'index.html';
+			if(normalizedUrl.indexOf('//') === 0) return 'http:' + normalizedUrl;
+			if(!/^[a-z][a-z\d+.-]*:\/\//i.test(normalizedUrl)) return 'http://' + normalizedUrl;
+			return normalizedUrl;
+		};
+
+		let url = localStorage.getItem('lampa_url');
+		if(url) url = normalizeUrl(url);
+		if(!(url && isValidUrl(url))) url = 'index.html';
+		content.setAttribute('src', url);
+
+		let appLanguage = (window.navigator.userLanguage || window.navigator.language)
+			.slice(0, 2)
+			.toLowerCase();
+		if(['ru', 'en', 'zh'].indexOf(appLanguage) == -1) appLanguage = 'en';
+
+		let Lang = {
+			'change_url_title': {
+				ru: 'Изменить адрес Lampa',
+				en: 'Change Lampa URL',
+				zh: '更改网址'
+			},
+			'input_url_title': {
+				ru: 'Укажите адрес Lampa',
+				en: 'Please enter Lampa URL',
+				zh: '输入你的LAMPA网址'
+			},
+			'invalid_url_title': {
+				ru: 'Указан некорректный адрес',
+				en: 'The URL is invalid',
+				zh: '网址无效'
+			}
+		};
+
+		let urlSettingsButton = document.getElementById('url-settings');
+		urlSettingsButton.title = Lang['change_url_title'][appLanguage];
+		urlSettingsButton.setAttribute('aria-label', Lang['change_url_title'][appLanguage]);
+
+		let changeUrl = ()=>{
+			let newUrl = prompt(
+				Lang['input_url_title'][appLanguage],
+				url
+			);
+			if(newUrl == null) return;
+			newUrl = normalizeUrl(newUrl);
+			if(!isValidUrl(newUrl)){
+				alert(Lang['invalid_url_title'][appLanguage]);
+				return;
+			}
+			localStorage.setItem('lampa_url', newUrl);
+			url = newUrl;
+			content.setAttribute('src', url);
+		};
+
+		urlSettingsButton.addEventListener('click', changeUrl);
+
+		restoreWindowState();
+		win.show();
+
+		setTimeout(()=>{
+			document.getElementById('loader').classList.add('loader--complite');
+
+			setTimeout(()=>{
+				document.getElementById('loader').remove();
+			}, 400);
+		}, 1000);
+	</script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main, master]
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Пересобрать, даже если Lampa и NW.js не изменились'
+        type: boolean
+        default: false
+
+concurrency:
+  group: build-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache downloads
+        uses: actions/cache@v4
+        with:
+          path: cache
+          key: deps-${{ runner.os }}-v1
+          restore-keys: |
+            deps-${{ runner.os }}-
+
+      - name: Build and publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force == 'true' }}
+        shell: pwsh
+        run: ./scripts/Build-Release.ps1

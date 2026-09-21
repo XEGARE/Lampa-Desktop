@@ -1,0 +1,15 @@
+{
+    "main": "frame.html",
+    "name": "Lampa",
+    "node-remote": "*://*/*",
+    "window": {
+        "icon": "frame/icon.ico",
+        "show": false,
+        "frame": false,
+        "width": 1200,
+        "height": 700,
+        "min_width": 1000,
+        "min_height": 560
+    },
+    "chromium-args": "--user-data-dir=user --disable-web-security --disable-site-isolation-trials --disable-features=BlockInsecurePrivateNetworkRequests,WebRtcAllowInputVolumeAdjustment --enable-features=VideoPipForceTrustedForMediaPlaybackForTesting"
+}
