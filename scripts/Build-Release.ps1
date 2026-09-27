@@ -554,7 +554,7 @@ function New-ReleaseNotes {
         $anyChange = $true
         $lines.Add('')
         $lines.Add('### FFmpeg')
-        $lines.Add(('Библиотека [nwjs-ffmpeg-prebuilt](https://github.com/nwjs-ffmpeg-prebuilt/nwjs-ffmpeg-prebuilt) обновлена **{0} → {1}** (ставится в пару к NW.js).' -f $Previous.ffmpeg.version, $Current.ffmpeg.version))
+        $lines.Add(('Библиотека [nwjs-ffmpeg-prebuilt](https://github.com/nwjs-ffmpeg-prebuilt/nwjs-ffmpeg-prebuilt) обновлена **{0} → {1}**.' -f $Previous.ffmpeg.version, $Current.ffmpeg.version))
     }
 
     if ($Current.lampa.changed) {
@@ -675,6 +675,13 @@ if (-not $nwjsInfo) {
     throw "NW.js $nwjsVersion was not found in versions.json"
 }
 
+$ffmpegRelease = Invoke-GitHubApi '/repos/nwjs-ffmpeg-prebuilt/nwjs-ffmpeg-prebuilt/releases/latest'
+$ffmpegVersion = $ffmpegRelease.tag_name
+$ffmpegAsset = @($ffmpegRelease.assets) | Where-Object { $_.name -like '*-win-x64.zip' } | Select-Object -First 1
+if (-not $ffmpegAsset) {
+    throw "FFmpeg release $ffmpegVersion has no win-x64.zip asset"
+}
+
 $lampaHead = Invoke-GitHubApi "/repos/$LampaOwner/$LampaRepoName/commits/main"
 $lampaSha = $lampaHead.sha
 
@@ -700,7 +707,7 @@ elseif ($isFirstRelease -or -not $previous.wrapper.sha) {
 else {
     $wrapperChanged = $previous.wrapper.sha -ne $wrapperSha
 }
-$ffmpegChanged = $nwjsChanged
+$ffmpegChanged = $isFirstRelease -or ($previous.ffmpeg.version -ne $ffmpegVersion)
 
 $current = [pscustomobject]@{
     builtAt = [DateTime]::UtcNow.ToString('o')
@@ -711,7 +718,7 @@ $current = [pscustomobject]@{
         changed   = [bool]$nwjsChanged
     }
     ffmpeg  = [pscustomobject]@{
-        version = $nwjsVersion
+        version = $ffmpegVersion
         source  = 'nwjs-ffmpeg-prebuilt'
         changed = [bool]$ffmpegChanged
     }
@@ -729,18 +736,19 @@ $current = [pscustomobject]@{
 }
 
 Write-Host "NW.js:  $nwjsVersion $(if ($nwjsChanged) { '(updated)' } else { '(same)' })"
+Write-Host "FFmpeg: $ffmpegVersion $(if ($ffmpegChanged) { '(updated)' } else { '(same)' })"
 Write-Host "Lampa:  $(Get-ShortSha $lampaSha) $(if ($lampaChanged) { '(updated)' } else { '(same)' })"
 Write-Host "Wrapper: $(Get-ShortSha $wrapperSha) $(if ($wrapperChanged) { '(updated)' } else { '(same)' })"
 
 $isSchedule = $GitHubEvent -eq 'schedule'
-$shouldBuild = $ForceBuild -or -not $isSchedule -or $nwjsChanged -or $lampaChanged
+$shouldBuild = $ForceBuild -or -not $isSchedule -or $nwjsChanged -or $ffmpegChanged -or $lampaChanged
 
 if (-not $shouldBuild) {
-    Write-Step 'No Lampa or NW.js updates, skipping scheduled build'
+    Write-Step 'No Lampa, NW.js or FFmpeg updates, skipping scheduled build'
     if ($env:GITHUB_STEP_SUMMARY) {
         @(
             '## Пропуск сборки'
-            'По расписанию новых версий Lampa и NW.js нет. Релиз не создавался.'
+            'По расписанию новых версий Lampa, NW.js и FFmpeg нет. Релиз не создавался.'
         ) -join "`n" | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
     }
     exit 0
@@ -796,8 +804,8 @@ Save-WebFile -Url "https://dl.nwjs.io/v$nwjsVersion/$nwjsFileName.zip" -LiteralP
 Expand-ArchiveSmart -LiteralPath $nwjsFile -DestinationPath $AppDir -Folder $nwjsFileName
 
 Write-Step 'Download FFmpeg'
-$ffmpegFile = Join-Path $CacheDir "$nwjsVersion-win-x64-ffmpeg.zip"
-Save-WebFile -Url "https://github.com/nwjs-ffmpeg-prebuilt/nwjs-ffmpeg-prebuilt/releases/download/$nwjsVersion/$nwjsVersion-win-x64.zip" -LiteralPath $ffmpegFile
+$ffmpegFile = Join-Path $CacheDir "$ffmpegVersion-win-x64-ffmpeg.zip"
+Save-WebFile -Url $ffmpegAsset.browser_download_url -LiteralPath $ffmpegFile
 Expand-ArchiveSmart -LiteralPath $ffmpegFile -DestinationPath $AppDir
 
 Write-Step 'Download Lampa source'

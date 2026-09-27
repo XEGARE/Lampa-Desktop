@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       force:
-        description: 'Пересобрать, даже если Lampa и NW.js не изменились'
+        description: 'Пересобрать, даже если Lampa, NW.js и FFmpeg не изменились'
         type: boolean
         default: false
 
